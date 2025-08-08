@@ -2,26 +2,7 @@
 
 **Crestbot** is a modern, TypeScript-first trading dashboard tailored for Indian markets (NSE/BSE). It blends real-time market data visualizations, intuitive order management, strategy configuration, backtesting tools, and logging—all wrapped in an operator-friendly UI.
 
-Powered by **Next.js App Router**, **Tailwind CSS**, and **shadcn/ui**, Crestbot is fast, accessible, and extensible.
-
----
-
-## Table of Contents
-
-- [Overview](#overview)  
-- [Key Features](#key-features)  
-- [Prerequisites](#prerequisites)  
-- [Installation](#installation)  
-- [Environment Variables](#environment-variables)  
-- [Running the App](#running-the-app)  
-- [Usage Guide](#usage-guide)  
-- [Project Structure](#project-structure)  
-- [API Endpoints](#api-endpoints)  
-- [Contributing](#contributing)  
-- [Roadmap](#roadmap)  
-- [Acknowledgments](#acknowledgments)  
-- [Security & Disclaimer](#security--disclaimer)  
-- [Troubleshooting](#troubleshooting)  
+Powered by **Next.js App Router**, **Tailwind CSS**, and **shadcn/ui**, Crestbot is fast, accessible, and extensible. 
 
 ---
 
