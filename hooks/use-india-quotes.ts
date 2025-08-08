@@ -11,6 +11,7 @@ export function useIndiaQuotes(symbols: string[], broker?: Broker) {
   const evtRef = useRef<EventSource | null>(null)
 
   const url = useMemo(() => {
+    if (!symbols.length) return ""
     const sp = new URLSearchParams()
     sp.set("symbols", symbols.join(","))
     if (broker) sp.set("broker", broker)
@@ -18,7 +19,7 @@ export function useIndiaQuotes(symbols: string[], broker?: Broker) {
   }, [symbols, broker])
 
   useEffect(() => {
-    if (!symbols.length) return
+    if (!url) return
     const es = new EventSource(url)
     evtRef.current = es
 
@@ -36,9 +37,7 @@ export function useIndiaQuotes(symbols: string[], broker?: Broker) {
         if (d?.symbol && Number.isFinite(d?.ltp)) {
           setPrices((prev) => ({ ...prev, [d.symbol.toUpperCase()]: d.ltp }))
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
 
     return () => {

@@ -3,49 +3,66 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useEffect, useRef, useState } from "react"
+import type { MarketKind } from "./market-switcher"
 import { cn } from "@/lib/utils"
 
-type Trade = { time: string; side: "buy" | "sell"; price: number; qty: number }
+type Trade = { ts: number; side: "BUY" | "SELL"; price: number; qty: number }
 
-export function TradesFeed({ symbol = "BTCUSDT" }: { symbol?: string }) {
+export function TradesFeed({
+  symbol,
+  livePrice,
+  market = "CRYPTO",
+}: {
+  symbol: string
+  livePrice?: number
+  market?: MarketKind
+}) {
   const [trades, setTrades] = useState<Trade[]>([])
-  const ref = useRef<HTMLDivElement | null>(null)
+  const timer = useRef<number | null>(null)
+  const lastPriceRef = useRef<number>(livePrice ?? 1000)
 
   useEffect(() => {
-    const t = setInterval(() => {
-      setTrades((prev) => {
-        const side: Trade["side"] = Math.random() > 0.5 ? "buy" : "sell"
-        const last = prev[prev.length - 1]?.price ?? 30000
-        const price = Math.max(1, last + (Math.random() - 0.5) * 25)
-        const qty = +(Math.random() * 0.02).toFixed(4)
-        const trade: Trade = { time: new Date().toLocaleTimeString(), side, price, qty }
-        const next = [...prev, trade].slice(-80)
-        return next
-      })
-      ref.current?.scrollTo({ top: ref.current.scrollHeight })
-    }, 700)
-    return () => clearInterval(t)
-  }, [])
+    if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
+      lastPriceRef.current = livePrice
+    }
+  }, [livePrice])
+
+  useEffect(() => {
+    timer.current = window.setInterval(() => {
+      const lp = lastPriceRef.current
+      const side = Math.random() > 0.5 ? "BUY" : "SELL"
+      const price =
+        typeof livePrice === "number"
+          ? livePrice + (Math.random() - 0.5) * Math.max(0.05, livePrice * 0.0008)
+          : lp + (Math.random() - 0.5) * Math.max(0.05, lp * 0.001)
+      lastPriceRef.current = Math.max(0.01, price)
+      const qty = Math.random() * (market === "INDIA" ? 100 : 0.01) + (market === "INDIA" ? 1 : 0.0001)
+      setTrades((prev) => [{ ts: Date.now(), side, price, qty }, ...prev].slice(0, 50))
+    }, 600)
+    return () => {
+      if (timer.current) clearInterval(timer.current)
+    }
+  }, [livePrice, market])
 
   return (
     <Card>
       <CardHeader className="py-3">
-        <CardTitle className="text-base">Recent Trades {symbol}</CardTitle>
+        <CardTitle className="text-sm">Recent Trades • {symbol}</CardTitle>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="h-[200px]" ref={ref as any}>
-          <ul className="space-y-1">
+      <CardContent className="p-0">
+        <ScrollArea className="h-48">
+          <div className="divide-y">
             {trades.map((t, i) => (
-              <li key={i} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{t.time}</span>
-                <span className={cn("tabular-nums", t.side === "buy" ? "text-emerald-700" : "text-red-600")}>
-                  {t.side.toUpperCase()}
+              <div key={t.ts + ":" + i} className="px-3 py-2 text-xs flex items-center justify-between">
+                <span className={cn("font-medium", t.side === "BUY" ? "text-emerald-600" : "text-red-600")}>
+                  {t.side}
                 </span>
-                <span className="tabular-nums">{t.price.toFixed(2)}</span>
-                <span className="tabular-nums">{t.qty}</span>
-              </li>
+                <span className="font-mono">{t.price.toFixed(2)}</span>
+                <span className="font-mono text-gray-600">{t.qty.toFixed(2)}</span>
+              </div>
             ))}
-          </ul>
+            {trades.length === 0 && <div className="px-3 py-8 text-center text-xs text-gray-500">Waiting for trades…</div>}
+          </div>
         </ScrollArea>
       </CardContent>
     </Card>

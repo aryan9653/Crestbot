@@ -20,14 +20,13 @@ export function MarketOverview({
 }) {
   const [pair, setPair] = useState(defaultSymbols[0])
 
-  // Reset selected symbol whenever the market or symbol list changes
   useEffect(() => {
     setPair(defaultSymbols[0])
   }, [market, defaultSymbols])
 
-  // Live India quotes via SSE
-  const indiaSymbols = useMemo(() => defaultSymbols, [defaultSymbols])
-  const { prices: indiaPrices } = useIndiaQuotes(market === "INDIA" ? indiaSymbols : [], undefined)
+  // Live India quotes via SSE (falls back to mock server-side)
+  const indiaSymbols = useMemo(() => (market === "INDIA" ? defaultSymbols : []), [market, defaultSymbols])
+  const { prices: indiaPrices, connected } = useIndiaQuotes(indiaSymbols, undefined)
 
   const livePrice = market === "INDIA" ? indiaPrices[pair] : undefined
   const tapePrices = market === "INDIA" ? indiaPrices : undefined
@@ -36,10 +35,12 @@ export function MarketOverview({
     <Card>
       <CardHeader className="space-y-2">
         <CardTitle className="flex items-center justify-between">
-          <span>{market === "CRYPTO" ? "Market Overview (Crypto)" : "Market Overview (India • NSE/BSE)"}</span>
+          <span>
+            {market === "CRYPTO" ? "Market Overview (Crypto)" : "Market Overview (India • NSE/BSE)"}
+          </span>
           <Select value={pair} onValueChange={setPair}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Symbol" />
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder={market === "CRYPTO" ? "Symbol (Crypto)" : "Symbol (NSE/BSE)"} />
             </SelectTrigger>
             <SelectContent>
               {defaultSymbols.map((s) => (
@@ -51,9 +52,11 @@ export function MarketOverview({
           </Select>
         </CardTitle>
         <TickerTape symbols={defaultSymbols} externalPrices={tapePrices} />
+        {market === "INDIA" && (
+          <p className="text-xs text-gray-500">Quote stream: {connected ? "Connected" : "Connecting…"} (Broker or Mock)</p>
+        )}
       </CardHeader>
 
-      {/* Animated swap between Crypto and India views */}
       <AnimatePresence mode="wait">
         <motion.div
           key={market + ":" + pair}
@@ -67,8 +70,8 @@ export function MarketOverview({
               <CandleChart symbol={pair} livePrice={livePrice} />
             </div>
             <div className="space-y-4">
-              <OrderBook symbol={pair} />
-              <TradesFeed symbol={pair} />
+              <OrderBook symbol={pair} livePrice={livePrice} market={market} />
+              <TradesFeed symbol={pair} livePrice={livePrice} market={market} />
             </div>
           </CardContent>
         </motion.div>

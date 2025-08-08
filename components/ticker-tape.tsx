@@ -10,34 +10,36 @@ export function TickerTape({
   externalPrices,
 }: {
   symbols?: string[]
-  externalPrices?: Record<string, number> // optional live price map
+  externalPrices?: Record<string, number>
 }) {
   const [ticks, setTicks] = useState<Ticker[]>(
-    symbols.map((s) => ({ symbol: s, price: 100 + Math.random() * 50000, change: 0 }))
+    symbols.map((s) => ({ symbol: s, price: 100 + Math.random() * 5000, change: 0 }))
   )
   const timer = useRef<number>()
 
-  // Update when external prices arrive
+  useEffect(() => {
+    setTicks(symbols.map((s) => ({ symbol: s, price: 100 + Math.random() * 5000, change: 0 })))
+  }, [symbols])
+
   useEffect(() => {
     if (!externalPrices) return
     setTicks((prev) =>
       prev.map((t) => {
         const p = externalPrices[t.symbol] ?? t.price
-        const change = ((p - t.price) / t.price) * 100
+        const change = ((p - t.price) / Math.max(1e-9, t.price)) * 100
         return { ...t, price: p, change: Number.isFinite(change) ? change : 0 }
       })
     )
   }, [externalPrices])
 
-  // Simulate only if no external stream
   useEffect(() => {
     if (externalPrices) return
     timer.current = window.setInterval(() => {
       setTicks((prev) =>
         prev.map((t) => {
-          const delta = (Math.random() - 0.5) * (t.price * 0.002)
+          const delta = (Math.random() - 0.5) * Math.max(1, t.price * 0.002)
           const price = Math.max(0.0001, t.price + delta)
-          const change = ((price - t.price) / t.price) * 100
+          const change = ((price - t.price) / Math.max(1e-9, t.price)) * 100
           return { ...t, price, change }
         })
       )

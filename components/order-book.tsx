@@ -1,84 +1,85 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import type { MarketKind } from "./market-switcher"
+import { cn } from "@/lib/utils"
 
 type Level = { price: number; qty: number }
 
-function makeBook(mid = 30000) {
-  const asks: Level[] = Array.from({ length: 10 }).map((_, i) => ({
-    price: mid + i * 5 + Math.random() * 2,
-    qty: +(Math.random() * 4).toFixed(3),
-  }))
-  const bids: Level[] = Array.from({ length: 10 }).map((_, i) => ({
-    price: mid - i * 5 - Math.random() * 2,
-    qty: +(Math.random() * 4).toFixed(3),
-  }))
-  return { asks, bids }
-}
-
-export function OrderBook({ symbol = "BTCUSDT" }: { symbol?: string }) {
-  const [mid, setMid] = useState(30000)
-  const [book, setBook] = useState(makeBook(mid))
+export function OrderBook({
+  symbol,
+  livePrice,
+  market = "CRYPTO",
+  depth = 14,
+}: {
+  symbol: string
+  livePrice?: number
+  market?: MarketKind
+  depth?: number
+}) {
+  const [mid, setMid] = useState(livePrice ?? 1000)
+  const timer = useRef<number | null>(null)
 
   useEffect(() => {
-    const t = setInterval(() => {
-      setMid((m) => {
-        const n = Math.max(1, m + (Math.random() - 0.5) * 25)
-        setBook(makeBook(n))
-        return n
+    if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
+      setMid(livePrice)
+      return
+    }
+    timer.current = window.setInterval(() => {
+      setMid((m) => Math.max(1, m + (Math.random() - 0.5) * Math.max(1, m * 0.002)))
+    }, 1000)
+    return () => {
+      if (timer.current) clearInterval(timer.current)
+    }
+  }, [livePrice])
+
+  const [bids, asks] = useMemo(() => {
+    const tick = market === "INDIA" ? 0.05 : 0.5
+    const make = (side: "bid" | "ask"): Level[] =>
+      Array.from({ length: depth }, (_, i) => {
+        const p = side === "bid" ? mid - (i + 1) * tick : mid + (i + 1) * tick
+        return { price: Math.max(0.01, Number(p.toFixed(2))), qty: Number((Math.random() * 100).toFixed(2)) }
       })
-    }, 1200)
-    return () => clearInterval(t)
-  }, [])
+    return [make("bid"), make("ask")]
+  }, [mid, market, depth])
 
   return (
-    <Card className="overflow-hidden">
+    <Card>
       <CardHeader className="py-3">
-        <CardTitle className="text-base">Order Book {symbol}</CardTitle>
+        <CardTitle className="text-sm">Order Book • {symbol}</CardTitle>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-3">
+      <CardContent className="grid grid-cols-2 gap-2 text-xs">
         <div>
-          <div className="text-xs text-muted-foreground mb-1">Asks</div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Price</TableHead>
-                <TableHead>Qty</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {book.asks
-                .slice()
-                .reverse()
-                .map((l, i) => (
-                  <TableRow key={"ask" + i} className="bg-red-50/40">
-                    <TableCell className="text-red-600">{l.price.toFixed(2)}</TableCell>
-                    <TableCell className="tabular-nums">{l.qty}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
+          <div className="flex justify-between text-gray-500 mb-1">
+            <span>Bid</span>
+            <span>Qty</span>
+          </div>
+          <div className="space-y-1">
+            {bids.map((l, i) => (
+              <div key={"b" + i} className="flex justify-between">
+                <span className="text-emerald-700 font-mono">{l.price.toFixed(2)}</span>
+                <span className="font-mono">{l.qty.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground mb-1">Bids</div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Price</TableHead>
-                <TableHead>Qty</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {book.bids.map((l, i) => (
-                <TableRow key={"bid" + i} className="bg-emerald-50/50">
-                  <TableCell className="text-emerald-700">{l.price.toFixed(2)}</TableCell>
-                  <TableCell className="tabular-nums">{l.qty}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="flex justify-between text-gray-500 mb-1">
+            <span>Ask</span>
+            <span>Qty</span>
+          </div>
+          <div className="space-y-1">
+            {asks.map((l, i) => (
+              <div key={"a" + i} className="flex justify-between">
+                <span className="text-red-700 font-mono">{l.price.toFixed(2)}</span>
+                <span className="font-mono">{l.qty.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col-span-2 text-center text-xs text-gray-500 mt-2">
+          Mid: <span className={cn("font-mono", "text-gray-700")}>{mid.toFixed(2)}</span>
         </div>
       </CardContent>
     </Card>

@@ -1,21 +1,20 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AppHeader } from "@/components/nav-header"
+import { NavHeader } from "@/components/nav-header"
 import { AppFooter } from "@/components/app-footer"
 import { MarketOverview } from "@/components/market-overview"
 import { PositionSummary } from "@/components/position-summary"
 import { OrderForm } from "@/components/order-form"
-import { FearGreedPanel } from "@/components/fear-greed"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MarketSwitcher, type IndiaBroker, type MarketKind } from "@/components/market-switcher"
+import { IndiaStockList } from "@/components/india-stock-list"
 
 export default function Page() {
   const [connected, setConnected] = useState(true)
   const [marketStatus, setMarketStatus] = useState<"open" | "closed" | "volatile">("open")
   const [serverTime, setServerTime] = useState<string>(new Date().toISOString())
 
-  // New: Market selection state
   const [market, setMarket] = useState<MarketKind>("CRYPTO")
   const [broker, setBroker] = useState<IndiaBroker>("Zerodha")
 
@@ -25,7 +24,7 @@ export default function Page() {
       const states: ("open" | "closed" | "volatile")[] = ["open", "open", "open", "volatile"]
       setMarketStatus(states[Math.floor(Math.random() * states.length)])
     }, 15000)
-    const c = setInterval(() => setConnected((c) => (Math.random() < 0.97 ? true : !c)), 20000)
+    const c = setInterval(() => setConnected((c0) => (Math.random() < 0.98 ? true : !c0)), 20000)
     return () => {
       clearInterval(t)
       clearInterval(m)
@@ -35,47 +34,50 @@ export default function Page() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <AppHeader />
-      <main className="flex-1 container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
-        <MarketSwitcher
-          market={market}
-          onMarketChange={setMarket}
-          broker={broker}
-          onBrokerChange={setBroker}
-        />
-        <section className="grid grid-cols-1 2xl:grid-cols-3 gap-4 md:gap-6">
-          <div className="2xl:col-span-2 space-y-4 md:space-y-6">
+      <NavHeader />
+      <main className="container mx-auto flex-1 space-y-4 p-4 md:space-y-6 md:p-6">
+        <MarketSwitcher market={market} onMarketChange={setMarket} broker={broker} onBrokerChange={setBroker} />
+
+        <section className="grid grid-cols-1 gap-4 md:gap-6 2xl:grid-cols-3">
+          <div className="space-y-4 md:space-y-6 2xl:col-span-2">
             <MarketOverview
               market={market}
               defaultSymbols={
                 market === "CRYPTO"
-                  ? ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-                  : ["NIFTY", "RELIANCE", "TCS", "HDFCBANK", "INFY"]
+                  ? ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
+                  : ["RELIANCE", "TCS", "HDFCBANK", "INFY", "SBIN"]
               }
             />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              <PositionSummary />
-              <FearGreedPanel />
+
+            {market === "INDIA" && (
+              <div className="mt-4 md:mt-6">
+                <IndiaStockList broker={broker} />
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
+              <PositionSummary market={market} />
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <p>{"Switch between Crypto and India to see equivalent functionality."}</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    <li>{"India mode streams NSE/BSE quotes via /api/india/stream (real if broker envs available, else mocked)."}</li>
+                    <li>{"Do not expose broker keys on the client. Keep them as server environment variables."}</li>
+                  </ul>
+                </CardContent>
+              </Card>
             </div>
           </div>
-          <div className="2xl:col-span-1 space-y-4 md:space-y-6">
+
+          <div className="space-y-4 md:space-y-6 2xl:col-span-1">
             <OrderForm market={market} broker={broker} />
-            <Card>
-              <CardHeader>
-                <CardTitle>Notes</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground space-y-2">
-                <p>{"Simulated data for demonstration. Replace mocks with your broker/exchange APIs."}</p>
-                <ul className="list-disc pl-5">
-                  <li>{"For India, use broker APIs (e.g., Kite Connect, Upstox, Angel One SmartAPI, DhanHQ)."}</li>
-                  <li>{"Do not expose API keys on the client. Use server routes as a proxy."}</li>
-                </ul>
-              </CardContent>
-            </Card>
           </div>
         </section>
       </main>
-      <AppFooter connected={connected} marketStatus={marketStatus} serverTime={serverTime} />
+      <AppFooter connected={connected} marketStatus={marketStatus} serverTime={serverTime} market={market} broker={broker} />
     </div>
   )
 }

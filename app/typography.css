@@ -1,0 +1,19 @@
+/* Display font for headings: Sora via var(--font-display) */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol";
+  letter-spacing: -0.01em;
+}
+
+/* Optional: slightly tighter leading for big display headings */
+h1,
+h2 {
+  line-height: 1.1;
+}

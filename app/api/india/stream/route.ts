@@ -1,12 +1,10 @@
 /**
  * SSE stream of India market quotes (NSE/BSE) for given symbols.
- * Query params:
- *  - symbols: comma-separated, e.g. RELIANCE,TCS,HDFCBANK,INFY
- *  - broker: Zerodha|Upstox|AngelOne|Dhan (optional; first available creds will be used if omitted)
+ * Will attempt broker APIs if env creds exist; otherwise emits mock LTPs.
  *
- * Notes:
- *  - If no broker credentials are set in env, the stream falls back to mocked quotes.
- *  - For live data, provide the broker tokens as environment variables on the server.
+ * Query:
+ *  - symbols: comma-separated NSE symbols (e.g., RELIANCE,TCS,HDFCBANK,INFY,SBIN)
+ *  - broker: Zerodha|Upstox|AngelOne|Dhan (optional)
  */
 import { NextRequest } from "next/server"
 
@@ -29,8 +27,6 @@ export async function GET(req: NextRequest) {
   }
 
   const encoder = new TextEncoder()
-
-  // Choose broker by availability of credentials (or requested one)
   const available = getAvailableBrokers()
   const broker: Broker | "mock" =
     (requestedBroker && available.includes(requestedBroker) && requestedBroker) ||
@@ -39,19 +35,12 @@ export async function GET(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      // Write initial event
       controller.enqueue(encoder.encode(`event: info\ndata: ${JSON.stringify({ broker })}\n\n`))
-
       let stop = false
       const abort = req.signal
-      abort.addEventListener("abort", () => {
-        stop = true
-      })
+      abort.addEventListener("abort", () => { stop = true })
 
-      // Poll interval for REST brokers (WebSockets not used in this demo route)
       const intervalMs = 2000
-
-      // Seed mock state for fallback or as a backup
       const mockState = Object.fromEntries(
         symbols.map((s) => [s, 1000 + Math.random() * 500])
       ) as Record<string, number>
@@ -60,18 +49,11 @@ export async function GET(req: NextRequest) {
         if (stop) return
         try {
           let quotes: Record<string, number> | null = null
+          if (broker === "Zerodha") quotes = await fetchZerodhaQuotes(symbols)
+          else if (broker === "Upstox") quotes = await fetchUpstoxQuotes(symbols)
+          else if (broker === "AngelOne") quotes = await fetchAngelQuotes(symbols)
+          else if (broker === "Dhan") quotes = await fetchDhanQuotes(symbols)
 
-          if (broker === "Zerodha") {
-            quotes = await fetchZerodhaQuotes(symbols)
-          } else if (broker === "Upstox") {
-            quotes = await fetchUpstoxQuotes(symbols)
-          } else if (broker === "AngelOne") {
-            quotes = await fetchAngelQuotes(symbols)
-          } else if (broker === "Dhan") {
-            quotes = await fetchDhanQuotes(symbols)
-          }
-
-          // If no live quotes (missing env or API failure), update mock
           if (!quotes) {
             quotes = {}
             for (const s of symbols) {
@@ -83,27 +65,18 @@ export async function GET(req: NextRequest) {
             }
           }
 
-          // Emit quotes as individual SSE messages
           const now = Date.now()
           for (const [symbol, ltp] of Object.entries(quotes)) {
             const payload = JSON.stringify({ symbol, ltp, ts: now, broker })
             controller.enqueue(encoder.encode(`data: ${payload}\n\n`))
           }
         } catch (err) {
-          // Soft error; keep the stream alive
-          controller.enqueue(
-            encoder.encode(`event: warn\ndata: ${JSON.stringify({ error: "poll_failed" })}\n\n`)
-          )
+          controller.enqueue(encoder.encode(`event: warn\ndata: ${JSON.stringify({ error: "poll_failed" })}\n\n`))
         }
-        if (!stop) {
-          setTimeout(tick, intervalMs)
-        }
+        if (!stop) setTimeout(tick, intervalMs)
       }
 
       tick()
-    },
-    cancel() {
-      // nothing
     },
   })
 
@@ -127,9 +100,9 @@ function getAvailableBrokers(): Broker[] {
   return list
 }
 
-// Map app symbol (e.g., RELIANCE) to broker-specific instrument IDs
+// Broker helpers
+
 function mapToZerodhaInstruments(symbols: string[]) {
-  // Basic mapping for common equities. Extend with instrument master for completeness.
   return symbols.map((s) => `NSE:${s}`)
 }
 
@@ -138,21 +111,11 @@ async function fetchZerodhaQuotes(symbols: string[]): Promise<Record<string, num
     const apiKey = process.env.ZERODHA_API_KEY!
     const accessToken = process.env.ZERODHA_ACCESS_TOKEN!
     if (!apiKey || !accessToken) return null
-
     const instruments = mapToZerodhaInstruments(symbols)
-    const url = `https://api.kite.trade/quote?${instruments
-      .map((i) => `i=${encodeURIComponent(i)}`)
-      .join("&")}`
-
-    const res = await fetch(url, {
-      headers: {
-        "X-Kite-Version": "3",
-        Authorization: `token ${apiKey}:${accessToken}`,
-      },
-    })
+    const url = `https://api.kite.trade/quote?${instruments.map((i) => `i=${encodeURIComponent(i)}`).join("&")}`
+    const res = await fetch(url, { headers: { "X-Kite-Version": "3", Authorization: `token ${apiKey}:${accessToken}` } })
     if (!res.ok) return null
     const json = (await res.json()) as any
-    // Response shape: { data: { "NSE:RELIANCE": { last_price: 1234.5 }, ... } }
     const out: Record<string, number> = {}
     const data = json?.data ?? {}
     for (const [key, obj] of Object.entries<any>(data)) {
@@ -167,7 +130,6 @@ async function fetchZerodhaQuotes(symbols: string[]): Promise<Record<string, num
 }
 
 function mapToUpstoxSymbols(symbols: string[]) {
-  // Upstox format for cash equities: NSE_EQ|RELIANCE
   return symbols.map((s) => `NSE_EQ|${s}`)
 }
 
@@ -176,17 +138,10 @@ async function fetchUpstoxQuotes(symbols: string[]): Promise<Record<string, numb
     const token = process.env.UPSTOX_ACCESS_TOKEN!
     if (!token) return null
     const list = mapToUpstoxSymbols(symbols)
-    const url = `https://api-v2.upstox.com/market-quote/quotes?${list
-      .map((s) => `symbol=${encodeURIComponent(s)}`)
-      .join("&")}`
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
+    const url = `https://api-v2.upstox.com/market-quote/quotes?${list.map((s) => `symbol=${encodeURIComponent(s)}`).join("&")}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return null
     const json = (await res.json()) as any
-    // Response shape: { data: { "NSE_EQ|RELIANCE": { last_price: ... }, ... } }
     const out: Record<string, number> = {}
     const data = json?.data ?? {}
     for (const [key, obj] of Object.entries<any>(data)) {
@@ -200,21 +155,13 @@ async function fetchUpstoxQuotes(symbols: string[]): Promise<Record<string, numb
   }
 }
 
-// Angel One SmartAPI (simplified; their quotes API often POSTs with JSON body)
 async function fetchAngelQuotes(symbols: string[]): Promise<Record<string, number> | null> {
   try {
     const apiKey = process.env.ANGEL_API_KEY!
     const jwt = process.env.ANGEL_JWT_TOKEN!
     if (!apiKey || !jwt) return null
-
-    const url =
-      "https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote"
-    const body = {
-      mode: "LTP",
-      exchangeTokens: {
-        NSE: symbols, // Simplified; ideally map to exchange token IDs
-      },
-    }
+    const url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote"
+    const body = { mode: "LTP", exchangeTokens: { NSE: symbols } }
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -226,7 +173,6 @@ async function fetchAngelQuotes(symbols: string[]): Promise<Record<string, numbe
     })
     if (!res.ok) return null
     const json = (await res.json()) as any
-    // Expected: data with list of { symbol: "RELIANCE", ltp: number }
     const out: Record<string, number> = {}
     const list: any[] = json?.data || []
     for (const item of list) {
@@ -244,14 +190,10 @@ async function fetchDhanQuotes(symbols: string[]): Promise<Record<string, number
   try {
     const token = process.env.DHAN_ACCESS_TOKEN!
     if (!token) return null
-    // Dhan batch quotes endpoint (spec may vary; adjust per latest docs)
     const url = "https://api.dhan.co/marketlive/quotes"
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "access-token": token,
-        "Content-Type": "application/json",
-      },
+      headers: { "access-token": token, "Content-Type": "application/json" },
       body: JSON.stringify({ symbols }),
     })
     if (!res.ok) return null
